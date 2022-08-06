@@ -1,0 +1,13 @@
+[rules]
+non_ansi_module = true
+wire_reg = false
+tab_character = false
+input_with_var = false
+blocking_assignment_in_always_ff = true
+case_default = true
+default_nettype_none = false
+enum_with_type = true
+for_with_begin = true
+non_blocking_assignment_in_always_comb = true
+loop_variable_declaration = true
+level_sensitive_always = true
