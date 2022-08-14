@@ -118,13 +118,16 @@ module cv_keyboard
 (
 	input              clk,
 	input              reset,
+	input              laser,
 	input        [8:0] ps2_key, // MSB represents extended or not extended
 	input              ps2_keydown,
 	input              ps2_strobe,
 	input        [7:0] joy1,
 	input        [7:0] joy2,
-	input        [3:0] select,
-	output logic [7:0] code
+	input        [7:0] select_a,
+	input        [7:0] select_b,
+	output logic [7:0] code_a,
+	output logic [7:0] code_b
 );
 
 reg [511:0] KT; // Keyboard state
@@ -141,75 +144,151 @@ always_ff @(posedge clk) begin
 		last_strobe <= ps2_strobe;
 	end
 
-	case (select)
-		4'b1101: code <= 8'hFF &
-			(KT[KEY_Z] ? 8'hf5 : 8'hFF) &
-			(KT[KEY_A] ? 8'hee : 8'hFF) &
-			(KT[KEY_Q] ? 8'he7 : 8'hFF) &
-			(KT[KEY_2] ? 8'hcf : 8'hFF) &
-			(KT[KEY_X] ? 8'hed : 8'hFF) &
-			(KT[KEY_S] ? 8'hde : 8'hFF) &
-			(KT[KEY_W] ? 8'hf3 : 8'hFF) &
-			(KT[KEY_3] ? 8'h9f : 8'hFF) &
-			(KT[KEY_C] ? 8'hdd : 8'hFF) &
-			(KT[KEY_D] ? 8'hbe : 8'hFF) &
-			(KT[KEY_E] ? 8'heb : 8'hFF) &
-			(KT[KEY_4] ? 8'hd7 : 8'hFF) &
-			(KT[KEY_V] ? 8'hbd : 8'hFF) &
-			(KT[KEY_F] ? 8'hfc : 8'hFF) &
-			(KT[KEY_R] ? 8'hdb : 8'hFF) &
-			(KT[KEY_5] ? 8'hb7 : 8'hFF) &
-			(KT[KEY_B] ? 8'hf9 : 8'hFF) &
-			(KT[KEY_G] ? 8'hfa : 8'hFF) &
-			(KT[KEY_T] ? 8'hbb : 8'hFF) &
-			(KT[KEY_6] ? 8'haf : 8'hFF) &
-			(KT[KEY_LEFTSHIFT] ? 8'h7f : 8'hFF) &
-			(KT[KEY_BACKSPACE] ? 8'hf6 : 8'hFF) &
+	case (select_a[3:0])
+		4'b1101: code_b <= 8'hFF &
+			(KT[KEY_Z]          ? 8'hf5 : 8'hFF) &
+			(KT[KEY_A]          ? 8'hee : 8'hFF) &
+			(KT[KEY_Q]          ? 8'he7 : 8'hFF) &
+			(KT[KEY_2]          ? 8'hcf : 8'hFF) &
+			(KT[KEY_X]          ? 8'hed : 8'hFF) &
+			(KT[KEY_S]          ? 8'hde : 8'hFF) &
+			(KT[KEY_W]          ? 8'hf3 : 8'hFF) &
+			(KT[KEY_3]          ? 8'h9f : 8'hFF) &
+			(KT[KEY_C]          ? 8'hdd : 8'hFF) &
+			(KT[KEY_D]          ? 8'hbe : 8'hFF) &
+			(KT[KEY_E]          ? 8'heb : 8'hFF) &
+			(KT[KEY_4]          ? 8'hd7 : 8'hFF) &
+			(KT[KEY_V]          ? 8'hbd : 8'hFF) &
+			(KT[KEY_F]          ? 8'hfc : 8'hFF) &
+			(KT[KEY_R]          ? 8'hdb : 8'hFF) &
+			(KT[KEY_5]          ? 8'hb7 : 8'hFF) &
+			(KT[KEY_B]          ? 8'hf9 : 8'hFF) &
+			(KT[KEY_G]          ? 8'hfa : 8'hFF) &
+			(KT[KEY_T]          ? 8'hbb : 8'hFF) &
+			(KT[KEY_6]          ? 8'haf : 8'hFF) &
+			(KT[KEY_LEFTSHIFT]  ? 8'h7f : 8'hFF) &
+			(KT[KEY_BACKSPACE]  ? 8'hf6 : 8'hFF) &
 			joy_kb_mask_1;
 
-		4'b0111: code <= 8'hFF &
-			(KT[KEY_MINUS] ?  8'h7f : 8'hFF) &
-			(KT[KEY_LEFTBRACE] ? 8'hf5 : 8'hFF) & // This is actually colon
-			(KT[KEY_P] ? 8'hee : 8'hFF) &
-			(KT[KEY_SEMICOLON] ? 8'he7 : 8'hFF) &
-			(KT[KEY_SLASH] ? 8'hcf : 8'hFF) &
-			(KT[KEY_0] ? 8'hed : 8'hFF) &
-			(KT[KEY_O] ? 8'hde : 8'hFF) &
-			(KT[KEY_L] ? 8'hf3 : 8'hFF) &
-			(KT[KEY_DOT] ? 8'h9f : 8'hFF) &
-			(KT[KEY_9] ? 8'hdd : 8'hFF) &
-			(KT[KEY_I] ? 8'hbe : 8'hFF) &
-			(KT[KEY_K] ? 8'heb : 8'hFF) &
-			(KT[KEY_COMMA] ? 8'hd7 : 8'hFF) &
-			(KT[KEY_8] ? 8'hbd : 8'hFF) &
-			(KT[KEY_U] ? 8'hfc : 8'hFF) &
-			(KT[KEY_J] ? 8'hdb : 8'hFF) &
-			(KT[KEY_M] ? 8'hb7 : 8'hFF) &
-			(KT[KEY_7] ? 8'hf9 : 8'hFF) &
-			(KT[KEY_Y] ? 8'hfa : 8'hFF) &
-			(KT[KEY_H] ? 8'hbb : 8'hFF) &
-			(KT[KEY_N] ? 8'haf : 8'hFF) &
-			(KT[KEY_ENTER] ? 8'hf6 : 8'hFF) &
+		4'b0111: code_b <= 8'hFF &
+			(KT[KEY_MINUS]      ? 8'h7f : 8'hFF) &
+			(KT[KEY_LEFTBRACE]  ? 8'hf5 : 8'hFF) & // This is actually colon
+			(KT[KEY_P]          ? 8'hee : 8'hFF) &
+			(KT[KEY_SEMICOLON]  ? 8'he7 : 8'hFF) &
+			(KT[KEY_SLASH]      ? 8'hcf : 8'hFF) &
+			(KT[KEY_0]          ? 8'hed : 8'hFF) &
+			(KT[KEY_O]          ? 8'hde : 8'hFF) &
+			(KT[KEY_L]          ? 8'hf3 : 8'hFF) &
+			(KT[KEY_DOT]        ? 8'h9f : 8'hFF) &
+			(KT[KEY_9]          ? 8'hdd : 8'hFF) &
+			(KT[KEY_I]          ? 8'hbe : 8'hFF) &
+			(KT[KEY_K]          ? 8'heb : 8'hFF) &
+			(KT[KEY_COMMA]      ? 8'hd7 : 8'hFF) &
+			(KT[KEY_8]          ? 8'hbd : 8'hFF) &
+			(KT[KEY_U]          ? 8'hfc : 8'hFF) &
+			(KT[KEY_J]          ? 8'hdb : 8'hFF) &
+			(KT[KEY_M]          ? 8'hb7 : 8'hFF) &
+			(KT[KEY_7]          ? 8'hf9 : 8'hFF) &
+			(KT[KEY_Y]          ? 8'hfa : 8'hFF) &
+			(KT[KEY_H]          ? 8'hbb : 8'hFF) &
+			(KT[KEY_N]          ? 8'haf : 8'hFF) &
+			(KT[KEY_ENTER]      ? 8'hf6 : 8'hFF) &
 			joy_kb_mask_2;
 
-		4'b1011: code <= 8'hFF &
-			(KT[KEY_TAB] ? 8'h7f : 8'hFF) &
-			(KT[KEY_SPACE] ? 8'hf3 : 8'hFF) &
+		4'b1011: code_b <= 8'hFF &
+			(KT[KEY_TAB]        ? 8'h7f : 8'hFF) &
+			(KT[KEY_SPACE]      ? 8'hf3 : 8'hFF) &
 			joy_mask_2;
 
-		4'b1110: code <= 8'hFF &
+		4'b1110: code_b <= 8'hFF &
 			(KT[KEY_RIGHTSHIFT] ? 8'h7f : 8'hFF) &
 			(KT[KEY_APOSTROPHE] ? 8'h7f : 8'hFF) &
-			(KT[KEY_DOWN] ? 8'hfd : 8'hFF) &
-			(KT[KEY_UP] ? 8'hf7 : 8'hFF) &
-			(KT[KEY_LEFT] ? 8'hdf : 8'hFF) &
-			(KT[KEY_RIGHT] ? 8'hfb : 8'hFF) &
-			(KT[KEY_1] ? 8'hf3 : 8'hFF) &
+			(KT[KEY_DOWN]       ? 8'hfd : 8'hFF) &
+			(KT[KEY_UP]         ? 8'hf7 : 8'hFF) &
+			(KT[KEY_LEFT]       ? 8'hdf : 8'hFF) &
+			(KT[KEY_RIGHT]      ? 8'hfb : 8'hFF) &
+			(KT[KEY_1]          ? 8'hf3 : 8'hFF) &
 			joy_mask_1;
 
-		default: code <= 8'hFF;
+		default: code_b <= 8'hFF;
 	endcase
 
+	// äöå
+
+	case (select_b)
+		8'b1111_1110: code_a <= 8'hFF &
+			(KT[KEY_DOT]        ? 8'b1111_1011 : 8'hFF) & // .
+			(KT[KEY_ENTER]      ? 8'b1111_0111 : 8'hFF) & // return
+			(KT[KEY_3]          ? 8'b1110_1111 : 8'hFF) & // 3
+			(KT[KEY_E]          ? 8'b1101_1111 : 8'hFF) & // e
+			(KT[KEY_S]          ? 8'b1011_1111 : 8'hFF) & // s
+			(KT[KEY_X]          ? 8'b0111_1111 : 8'hFF);  // x
+
+		8'b1111_1101: code_a <= 8'hFF &
+			(KT[KEY_RIGHTBRACE] ? 8'b1111_1011 : 8'hFF) & // ä
+			(KT[KEY_SEMICOLON]  ? 8'b1111_0111 : 8'hFF) & // ;
+			(KT[KEY_2]          ? 8'b1110_1111 : 8'hFF) & // 2
+			(KT[KEY_W]          ? 8'b1101_1111 : 8'hFF) & // w
+			(KT[KEY_A]          ? 8'b1011_1111 : 8'hFF) & // a
+			(KT[KEY_Z]          ? 8'b0111_1111 : 8'hFF);  // z
+
+		8'b1111_1011: code_a <= 8'hFF &
+			(KT[KEY_I]          ? 8'b1111_1110 : 8'hFF) & // i
+			(KT[KEY_SLASH]      ? 8'b1111_1011 : 8'hFF) & // /
+			(KT[KEY_APOSTROPHE] ? 8'b1111_0111 : 8'hFF) & // å
+			(KT[KEY_1]          ? 8'b1110_1111 : 8'hFF) & // 1
+			(KT[KEY_Q]          ? 8'b1101_1111 : 8'hFF) & // q
+			(KT[KEY_LEFTCTRL]   ? 8'b1011_1111 : 8'hFF) & // ctrl
+			(KT[KEY_LEFTSHIFT]  ? 8'b0111_1111 : 8'hFF);  // shift
+
+		8'b1111_0111: code_a <= 8'hFF &
+			(KT[KEY_N]          ? 8'b1111_1110 : 8'hFF) & // n
+			(KT[KEY_X]          ? 8'b1111_1101 : 8'hFF) & // x
+			(KT[KEY_BACKSLASH]  ? 8'b1111_1011 : 8'hFF) & // ö
+			(KT[KEY_LEFTBRACE]  ? 8'b1111_0111 : 8'hFF) & // :
+			(KT[KEY_4]          ? 8'b1110_1111 : 8'hFF) & // 4
+			(KT[KEY_R]          ? 8'b1101_1111 : 8'hFF) & // r
+			(KT[KEY_D]          ? 8'b1011_1111 : 8'hFF) & // d
+			(KT[KEY_C]          ? 8'b0111_1111 : 8'hFF);  // c
+
+		8'b1110_1111: code_a <= 8'hFF &
+			(KT[KEY_COMMA]      ? 8'b1111_1011 : 8'hFF) & // ,
+			(KT[KEY_P]          ? 8'b1111_0111 : 8'hFF) & // p
+			(KT[KEY_5]          ? 8'b1110_1111 : 8'hFF) & // 5
+			(KT[KEY_T]          ? 8'b1101_1111 : 8'hFF) & // t
+			(KT[KEY_F]          ? 8'b1011_1111 : 8'hFF) & // f
+			(KT[KEY_V]          ? 8'b0111_1111 : 8'hFF);  // v
+
+		8'b1101_1111: code_a <= 8'hFF &
+			(KT[KEY_J]          ? 8'b1111_1110 : 8'hFF) & // j
+			(KT[KEY_L]          ? 8'b1111_1011 : 8'hFF) & // l
+			(KT[KEY_0]          ? 8'b1111_0111 : 8'hFF) & // 0
+			(KT[KEY_6]          ? 8'b1110_1111 : 8'hFF) & // 6
+			(KT[KEY_Y]          ? 8'b1101_1111 : 8'hFF) & // y
+			(KT[KEY_G]          ? 8'b1011_1111 : 8'hFF) & // g
+			(KT[KEY_B]          ? 8'b0111_1111 : 8'hFF);  // b
+
+		8'b1011_1111: code_a <= 8'hFF &
+			(KT[KEY_S]          ? 8'b1111_1101 : 8'hFF) & // s
+			(KT[KEY_K]          ? 8'b1111_1011 : 8'hFF) & // k
+			(KT[KEY_9]          ? 8'b1111_0111 : 8'hFF) & // 9
+			(KT[KEY_7]          ? 8'b1110_1111 : 8'hFF) & // 7
+			(KT[KEY_U]          ? 8'b1101_1111 : 8'hFF) & // u
+			(KT[KEY_H]          ? 8'b1011_1111 : 8'hFF) & // h
+			(KT[KEY_N]          ? 8'b0111_1111 : 8'hFF);  // n
+
+		8'b0111_1111: code_a <= 8'hFF &
+			(KT[KEY_X]          ? 8'b1111_1110 : 8'hFF) & // x
+			(KT[KEY_N]          ? 8'b1111_1101 : 8'hFF) & // n
+			(KT[KEY_SPACE]      ? 8'b1111_1011 : 8'hFF) & // space
+			(KT[KEY_O]          ? 8'b1111_0111 : 8'hFF) & // o
+			(KT[KEY_8]          ? 8'b1110_1111 : 8'hFF) & // 8
+			(KT[KEY_I]          ? 8'b1101_1111 : 8'hFF) & // i
+			(KT[KEY_J]          ? 8'b1011_1111 : 8'hFF) & // j
+			(KT[KEY_M]          ? 8'b0111_1111 : 8'hFF);  // m
+
+		default: code_a <= 8'hFF;
+	endcase
 	if (reset)
 		KT <= '0;
 end
@@ -228,13 +307,13 @@ module text_writer
 );
 
 typedef enum logic [2:0] {
-	STATE_IDLE = 3'b000,
-	STATE_CHOOSE = 3'b001,
+	STATE_IDLE       = 3'b000,
+	STATE_CHOOSE     = 3'b001,
 	STATE_SHIFT_DOWN = 3'b010,
-	STATE_SHIFT_UP = 3'b011,
-	STATE_KEY_DOWN = 3'b100,
-	STATE_KEY_UP = 3'b101,
-	STATE_WAIT = 3'b110
+	STATE_SHIFT_UP   = 3'b011,
+	STATE_KEY_DOWN   = 3'b100,
+	STATE_KEY_UP     = 3'b101,
+	STATE_WAIT       = 3'b110
 } writer_state_t;
 
 parameter cycles_per_key_change = 2155454;

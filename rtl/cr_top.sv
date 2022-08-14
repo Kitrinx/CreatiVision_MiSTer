@@ -3,14 +3,20 @@ module creativision
 	input clk,
 	input reset,
 	input [7:0] pb_in,
+	input [7:0] pa_in,
 	input nmi,
 	input pal,
 	input [15:0] key_mask,
 	input [7:0] rom_do,
 	input [7:0] boot_do,
 	input [15:0] rom_size,
+	input [1:0] bank_mode,
+	input [1:0] page0_mode,
+	input ca1_in,
 	input border,
 	output [7:0] pa_out,
+	output [7:0] pb_out,
+	output ca2_out,
 	output [7:0] cart_dout,
 	output [1:0] cart_write,
 	output [15:0] rom_addr,
@@ -37,7 +43,7 @@ logic [1:0] vid_div;
 logic [4:0] phi_div;
 logic ce_vid, ce_vid_tog;
 logic [15:0] rom1_mask, rom2_mask, rom1_pre, rom2_pre;
-integer phi_int;
+integer phi_int = 0;
 
 wire [15:0] rom_size_plus_1 = rom_size + 1'd1;
 logic [1:0] ram_en;
@@ -50,16 +56,6 @@ always_ff @(posedge clk) begin
 	phi2 <= 0;
 	ce_pix <= 0;
 	ram_en <= 2'b00;
-
-	// FIXME: CPU divider should be exactly 4MHz (2MHz CPU clock)
-	// but this keeps stuff synced and is only 2.4% too slow
-	phi_div <= phi_div + 1'd1;
-	// if (phi_div == 10) begin
-	// 	phi_toggle <= ~phi_toggle;
-	// 	phi_div <= 0;
-	// 	phi1 <= ~phi_toggle;
-	// 	phi2 <= phi_toggle;
-	// end
 
 	phi_int <= phi_int + 2328;
 	if (phi_int >= 25000) begin
@@ -82,12 +78,19 @@ always_ff @(posedge clk) begin
 
 	// The cart mappers are too basic to even make a new file
 	case (rom_size_plus_1)
+		16'h0000: begin // use RAM if no cart
+			rom1_mask <= 14'h3FFF;
+			rom2_mask <= 14'h3FFF;
+			rom1_pre <= 14'h0000;
+			rom2_pre <= 15'h4000;
+			ram_en <= bank_mode;
+		end
+
 		16'h1000: begin // 4k
 			rom1_mask <= 14'h0FFF;
 			rom2_mask <= 14'h3FFF;
 			rom1_pre <= 15'h0000;
 			rom2_pre <= 15'h4000;
-			ram_en <= 2'b10;
 		end
 
 		16'h1800: begin // 6k
@@ -95,7 +98,6 @@ always_ff @(posedge clk) begin
 			rom2_mask <= 14'h3FFF;
 			rom1_pre <= cpu_addr_bus[12:0] < 16'h1000 ? 15'h1000 : 15'h0000;
 			rom2_pre <= 15'h4000;
-			ram_en <= 2'b10;
 		end
 
 		16'h2000: begin // 8k
@@ -103,7 +105,6 @@ always_ff @(posedge clk) begin
 			rom2_mask <= 14'h3FFF;
 			rom1_pre <= 15'h0000;
 			rom2_pre <= 15'h4000;
-			ram_en <= 2'b10;
 		end
 
 		16'h2800: begin // 10k
@@ -139,7 +140,6 @@ always_ff @(posedge clk) begin
 			rom2_mask <= 14'h3FFF;
 			rom1_pre <= 14'h0000;
 			rom2_pre <= 15'h4000;
-			ram_en <= 2'b11;
 		end
 	endcase
 end
@@ -153,18 +153,24 @@ end
 // 8000 - BFFF - Cart ROM 1
 // C000 - FFFF - BIOS ROM (laser bios is 16k). Some writes here for centronics printer?
 
+wire sys_ram_cs = (~|ram_en || ~page0_mode[1]) & ~sys_ram_cs_n;
+wire laser_ram_cs = (page0_mode[1] & |ram_en) &
+	((~rom_csn_1 & ram_en[0]) | (~rom_csn_2 & ram_en[1]) | ~sys_ram_cs); // Emulate the 4k mirroring
+
 assign cart_dout = cpu_dout;
-assign cart_write = {~cpu_rwn & ~rom_csn_2 & ram_en[1], ~cpu_rwn & ~rom_csn_1 & ram_en[0]};
+assign cart_write = ~cpu_rwn & laser_ram_cs;
 assign bootrom_cs_n = rom_csn_0;
 assign cart_cs_n = rom_csn_1 & rom_csn_2;
-assign rom_addr = ~rom_csn_2 ? (rom2_pre | (cpu_addr_bus[13:0] & rom2_mask[13:0])) : ~rom_csn_1 ?
+assign rom_addr = laser_ram_cs ? {(~rom_csn_2 & ram_en[1]), cpu_addr_bus[13:0]} :
+	~rom_csn_2 ? (rom2_pre | (cpu_addr_bus[13:0] & rom2_mask[13:0])) : ~rom_csn_1 ?
 	(rom1_pre | (cpu_addr_bus[13:0] & rom1_mask[13:0])) :
 	cpu_addr_bus[13:0];
 
 // Bus Aribtation
 assign data_bus =
 	~cpu_rwn ? cpu_dout :
-	~sys_ram_cs_n ? sys_ram_dout :
+	sys_ram_cs ? sys_ram_dout :
+	laser_ram_cs ? rom_do :
 	~pia_cs_n ? pia_dout :
 	~vdp_rcs_n ? vdp_dout :
 	~bootrom_cs_n ? boot_do :
@@ -212,11 +218,19 @@ T65 m6502
 	.DO             (cpu_dout)
 );
 
-// 1kb system ram
-spram #(.addr_width(10), .mem_name("SYS")) sysram
+// CreatiVision: 1kb system ram mirrored 4x at $0 (just ram CS)
+// Laser 2001: 16kb system ram, mirrored at $4k, $8k, and $0 (rom1, rom2, and ram cs's);
+// Laser 2001 w/ram expansion: $4k mirrored at $0. $8k is the extra 16kb.
+// When a cart is inserted in Laser 2001, the rom CS's to the ram are disabled, and only the RAM cs
+// still works to access 4k of the 16kb of ram.
+
+
+
+// 1k (4k for extra option) zero page system ram
+spram #(.addr_width(12), .mem_name("SYS")) sysram
 (
 	.clock          (clk),
-	.address        (cpu_addr_bus[9:0]),
+	.address        (|page0_mode ? cpu_addr_bus[11:0] : {2'b00, cpu_addr_bus[11:0]}),
 	.data           (cpu_dout),
 	.enable         (1),
 	.wren           (~cpu_rwn & ~sys_ram_cs_n),
@@ -278,13 +292,16 @@ spram #(.addr_width(14), .mem_name("VID")) vidram
 logic audio_cs_n;
 logic audio_rdy;
 logic [7:0] pia_pb, pia_pa;
-logic [7:0] pb_ddr;
-wire [7:0] undriven_mask = ~pb_ddr & pb_in; // PB is pulled up if undriven.
-wire [7:0] pb_mask = (pb_ddr & pia_pb) | undriven_mask;
+logic [7:0] pb_ddr, pa_ddr;
+wire [7:0] undriven_mask_b = ~pb_ddr & pb_in; // PB is pulled up if undriven.
+wire [7:0] undriven_mask_a = ~pa_ddr & pa_out; // PA is NOT pulled up if undriven on CV, but pin 6 is.
+wire [7:0] pa_mask = (pa_ddr & pia_pa) | undriven_mask_a;
+wire [7:0] pb_mask = (pb_ddr & pia_pb) | undriven_mask_b;
 logic cb2_oe;
 logic pia_cb2;
 
-assign pa_out = pia_pa;
+assign pa_out = pa_mask;
+assign pb_out = pb_mask;
 
 pia6520 pia
 (
@@ -295,12 +312,13 @@ pia6520 pia
 	.we             (~cpu_rwn && ~pia_cs_n),
 	.irq            (),
 	.porta_out      (pia_pa),
-	.porta_in       (pia_pa),
+	.porta_in       (pa_in),
 	.portb_out      (pia_pb),
 	.portb_in       (pb_mask),
+	.DDRA           (pa_ddr),
 	.DDRB           (pb_ddr),
-	.ca1_in         (1),
-	.ca2_out        (),
+	.ca1_in         (ca1_in),
+	.ca2_out        (ca2_out),
 	.ca2_in         (1),
 	.cb1_in         (audio_rdy),
 	.cb2_out        (pia_cb2),
@@ -312,19 +330,6 @@ pia6520 pia
 );
 
 assign audio_cs_n = cb2_oe ? pia_cb2 : 1'b1;
-
-// always_comb begin
-// 	portb_in = 8'b1111_1111;
-// 	if (~pia_pa[0]) begin          // Joystick 1
-// 		portb_in = {~joy1[5], 1'b1, ~joy1[1], 1'b1, ~joy1[3], ~joy1[0], ~joy1[2], 1'b1};
-// 	end else if (~pia_pa[1]) begin // Keypad 1
-// 		portb_in = {~joy1[4], ~joy1[6], 3'b111, ~joy1[6], 2'b11};
-// 	end else if (~pia_pa[2]) begin // Joystick 2
-// 		portb_in = {~joy2[5], 1'b1, ~joy2[1], 1'b1, ~joy2[2], ~joy2[0], ~joy2[3], 1'b1};
-// 	end else if (~pia_pa[3]) begin // Keypad 2
-// 		portb_in = {~joy2[4], ~joy2[6], 3'b111, ~joy2[6], 2'b11};
-// 	end
-// end
 
 jt89 sn76489
 (

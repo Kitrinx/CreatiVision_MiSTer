@@ -191,7 +191,7 @@ assign AUDIO_MIX = 0;
 
 assign LED_DISK = (cart_download | bootrom_download | text_download) & ~ioctl_wait;
 assign LED_POWER = 0;
-assign LED_USER = ioctl_wait;
+assign LED_USER = kb_matrix ? ~pia_ca2 : ~pa_out[6];
 
 assign BUTTONS = 0;
 
@@ -204,19 +204,25 @@ localparam CONF_STR = {
 	"CreatiVision;;",
 	"-;",
 	"F1,rombin,Load Cartridge;",
-	"F2C,rombin,Load Bios;",
+	"FC2,rombin,Load Bios;",
 	"F3,bas,Load BASIC;",
 	"-;",
+	"O[14:13],System Type,CreatiVision,Laser 2001,Custom;",
+	"h1O[16:15],ZeroPage RAM,1k,4k,Mirrored 4k;",
+	"h1O[18:17],Extra RAM,None,$4000,Both;",
+	"h1O[19],Input Matrix,CreatiVision,Laser 2001;",
 	"O[7],Video Region,NTSC,PAL;",
 	"-;",
-	"O[1],Border,Off,On;",
-	"d0P1[6],Vertical Crop,Disabled,216p(5x);",
+	"P1,Audio & Video;",
+	"P1-;",
+	"P1O[1],Border,Off,On;",
+	"d0P1O[6],Vertical Crop,Disabled,216p(5x);",
 	"d0P1O[12:9],Crop Offset,0,2,4,8,10,12,-12,-10,-8,-6,-4,-2;",
-	"P1O9B,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
-	"O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
-	"O[3:2],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
-	"O[5:4],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
+	"P1O[122:121],Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
+	"P1O[3:2],Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
+	"P1O[5:4],Scale,Normal,V-Integer,Narrower HV-Integer,Wider HV-Integer;",
 	"-;",
+	"R8,Remove Cart;",
 	"R0,Reset;",
 	"J0,B,A,select,start;",
 	"jn,B,A,Select,Start;",
@@ -252,7 +258,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 	.buttons(buttons),
 	.status(status),
-	.status_menumask({en216p}),
+	.status_menumask({status[14],en216p}),
 
 	.ps2_key(ps2_key),
 	.joystick_0(joystick_0),
@@ -276,7 +282,7 @@ pll pll
 
 assign clk_vid = clk_sys;
 
-wire reset = RESET | status[0] | buttons[1] | cart_download | bootrom_download;
+wire reset = RESET | status[0] | status[8] | buttons[1] | cart_download | bootrom_download;
 
 //////////////////////////////////////////////////////////////////
 
@@ -300,9 +306,12 @@ wire text_download = ioctl_download && ioctl_index[5:0] == 3;
 reg [15:0] cart_mask = 0;
 reg [15:0] bios_mask = 0;
 
-always @(posedge clk_sys)
+always @(posedge clk_sys) begin
 	if (cart_download && ioctl_wr)
 		cart_mask <= ioctl_addr[15:0];
+	if (status[8])
+		cart_mask <= '0;
+end
 
 always @(posedge clk_sys)
 	if (bootrom_download && ioctl_wr)
@@ -311,7 +320,19 @@ always @(posedge clk_sys)
 wire [1:0] cart_wr;
 wire [7:0] cart_din;
 
-// 2kb system ROM
+logic tape_adc;
+logic tape_adc_act;
+
+ltc2308_tape #(.CLK_RATE(42954545)) ltc2308_tape
+(
+	.clk(clk_sys),
+	.reset(reset),
+	.ADC_BUS(ADC_BUS),
+	.dout(tape_adc),
+	.active(tape_adc_act)
+);
+
+// 16kb system ROM
 spram #(.addr_width(14), .mem_name("ROM")) bootrom
 (
 	.clock          (clk_sys),
@@ -335,8 +356,14 @@ spram #(.addr_width(15), .mem_name("CART")) cartrom
 	.cs             (1)
 );
 
-wire [3:0] controller_select;
-wire [7:0] controller_code;
+wire [7:0] pa_out, pb_out;
+wire [7:0] pa_in, pb_in;
+wire pia_ca1, pia_ca2;
+
+wire [1:0] bank_mode = status[14] && !status[18] ? {1'b0, status[17]} : 2'b11; // Default to RAM unless cart. Why not?
+wire [1:0] page0_mode = status[14] ? status[16:15] : (status[13] ? 2'b10 : 2'b00);
+wire kb_matrix = status[14] ? status[19] : status[13];
+assign pia_ca1 = kb_matrix ? tape_adc : 1'b1;
 
 creativision creativision
 (
@@ -344,8 +371,14 @@ creativision creativision
 	.rom_size   (cart_mask),
 	.border     (border),
 	.pal        (status[7]),
-	.pa_out     (controller_select),
-	.pb_in      (controller_code),
+	.ca1_in     (pia_ca1),
+	.ca2_out    (pia_ca2),
+	.pa_out     (pa_out),
+	.pb_out     (pb_out),
+	.pa_in      (kb_matrix ? pa_in : {tape_adc, pa_out[6:0]}),
+	.pb_in      (pb_in),
+	.bank_mode  (bank_mode),
+	.page0_mode (page0_mode),
 	.nmi        (joystick_0[7] | joystick_1[7]),
 	.reset      (reset),
 	.cart_write (cart_wr),
@@ -369,8 +402,8 @@ assign CLK_VIDEO = clk_vid;
 wire [1:0] ar = status[122:121];
 wire [3:0] vcopt = status[12:9];
 
-wire [11:0] arx = (!ar) ? (border ? 12'd142 : 12'd32) : (ar - 1'd1);
-wire [11:0] ary = (!ar) ? (border ? 12'd105 : 12'd21) : 12'd0;
+wire [11:0] arx = (!ar) ? (border ? (status[7] ? 12'd2363 : 12'd142) : (status[7] ? 12'd512 : 12'd32)) : (ar - 1'd1);
+wire [11:0] ary = (!ar) ? (border ? (status[7] ? 12'd1868 : 12'd105) : (status[7] ? 12'd279 : 12'd21)) : 12'd0;
 wire [2:0] scale = status[3:2];
 wire [2:0] sl = scale ? scale - 1'd1 : 3'd0;
 wire       scandoubler = (scale || forced_scandoubler);
@@ -418,6 +451,8 @@ video_mixer #(.LINE_LENGTH(372), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 
 wire [10:0] text_key;
 
+// 0x1800 big-endian 2 byte line sizes
+// 0x1400 big-endian 2 byte line sizes
 // FIXME: 0x1C00 to vram could probably be written directly filtering 0x0A newlines
 text_writer text_entry
 (
@@ -438,8 +473,10 @@ cv_keyboard keyboard_from_hell
 	.ps2_strobe     (text_download ? text_key[10]  : ps2_key[10]),
 	.joy1           (joystick_0),
 	.joy2           (joystick_1),
-	.select         (controller_select),
-	.code           (controller_code)
+	.select_a       (pa_out),
+	.select_b       (pb_out),
+	.code_b         (pb_in),
+	.code_a         (pa_in)
 );
 
 

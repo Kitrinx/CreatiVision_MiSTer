@@ -57,7 +57,9 @@ module pia6520
 	output reg [7:0] portb_out,
 	input      [7:0] portb_in,
 
+	output     [7:0] DDRA,
 	output     [7:0] DDRB,
+	output           ca2_oe,
 	output           cb2_oe,
 
 	input            ca1_in,
@@ -73,6 +75,7 @@ module pia6520
 );
 
 assign DDRB=ddrb;
+assign DDRA=ddra;
 
 reg [7:0] ddra;
 reg [5:0] cra;
@@ -97,6 +100,7 @@ wire porta_rd_strobe = rd_strobe && addr == ADDR_PORTA;
 wire portb_rd_strobe = rd_strobe && addr == ADDR_PORTB;
 wire portb_wr_strobe = wr_strobe && addr == ADDR_PORTB;
 
+assign ca2_oe = cra[5];
 assign cb2_oe = crb[5];
 
 // Implement CRA[5:0]
